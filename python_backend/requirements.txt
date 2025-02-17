@@ -1,0 +1,11 @@
+fastapi==0.109.2
+uvicorn==0.27.1
+python-multipart==0.0.6
+librosa==0.10.1
+spleeter==2.4.0
+essentia==2.1.beta5
+numpy==1.26.3
+scipy==1.12.0
+soundfile==0.12.1
+requests==2.31.0
+python-dotenv==1.0.1

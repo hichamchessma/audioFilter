@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: audio-filter-app
+  datasource:
+    url: jdbc:mysql://localhost:3306/filteraudio
+    username: root
+    password: Scematha2024
+    driver-class-name: com.mysql.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+
+minio:
+  endpoint: http://localhost:9000
+  accessKey: minioadmin
+  secretKey: minioadmin
+  bucket: audio-files
+
+python-service:
+  url: http://localhost:8000
+
+server:
+  port: 8080

@@ -23,6 +23,7 @@ processed/
 # Large files
 ffmpeg-release-essentials.zip
 python_backend/ffmpeg/
+pretrained_models/
 # IDE and editor files
 .vscode/
 .idea/

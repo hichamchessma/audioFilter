@@ -25,7 +25,7 @@ function App() {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'audio/*': ['.mp3', '.wav', '.flac', '.aac'],
+      'audio/*': ['.mp3', '.wav', '.flac', '.aac', '.mid'],
       'video/*': ['.mp4']
     }
   });

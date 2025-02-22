@@ -14,6 +14,8 @@ import urllib.request
 import zipfile
 import tarfile
 import sys
+from midi_processor import MidiProcessor
+from typing import Dict, Any
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -129,78 +131,115 @@ app.add_middleware(
 # Initialize Spleeter separator with two stems
 separator = Separator('spleeter:4stems', multiprocess=False)
 
+class AudioProcessor:
+    def __init__(self):
+        self.separator = separator
+        self.midi_processor = MidiProcessor()
+        
+    async def process_file(self, file_path: str, output_dir: str) -> Dict[str, Any]:
+        """Process an audio or MIDI file."""
+        try:
+            # Check if it's a MIDI file
+            if self.midi_processor.is_midi_file(file_path):
+                result = self.midi_processor.process_midi(file_path, output_dir)
+                return {
+                    'status': 'success',
+                    'type': 'midi',
+                    'analysis': result
+                }
+            
+            # If not MIDI, process as regular audio
+            # Create output directory
+            output_base_dir = os.path.join(os.path.dirname(__file__), "processed")
+            os.makedirs(output_base_dir, exist_ok=True)
+            
+            # Create a unique subdirectory for this processing
+            output_dir = os.path.join(output_base_dir, output_dir)
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Create a temporary directory for processing
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Convert input to WAV using FFmpeg
+                try:
+                    wav_path = os.path.join(temp_dir, "input.wav")
+                    result = subprocess.run([
+                        FFMPEG_PATH,
+                        "-i", file_path,
+                        "-ar", "44100",  # Set sample rate
+                        "-ac", "2",      # Set channels
+                        "-y",            # Overwrite output
+                        wav_path
+                    ], capture_output=True, text=True, encoding='utf-8')
+                    
+                    if result.returncode != 0:
+                        raise RuntimeError(f"FFmpeg conversion failed: {result.stderr}")
+                    logger.info("Successfully converted audio to WAV")
+                    
+                except Exception as e:
+                    logger.error("Error converting audio: %s", str(e))
+                    raise HTTPException(status_code=500, detail=str(e))
+                
+                try:
+                    # Verify model exists before processing
+                    ensure_model()
+                    
+                    # Create output directory for Spleeter
+                    temp_output_dir = os.path.join(temp_dir, "output")
+                    os.makedirs(temp_output_dir, exist_ok=True)
+                    
+                    # Separate the audio using Spleeter
+                    self.separator.separate_to_file(wav_path, temp_output_dir)
+                    logger.info("Successfully separated audio")
+                    
+                    # Process results and return paths
+                    separated_files = {}
+                    for stem in ['vocals', 'drums', 'bass', 'other']:
+                        stem_path = os.path.join(temp_output_dir, "input", f"{stem}.wav")
+                        if os.path.exists(stem_path):
+                            # Copy the file to the permanent output directory
+                            target_path = os.path.join(output_dir, f"{stem}.wav")
+                            shutil.copy2(stem_path, target_path)
+                            separated_files[stem] = target_path
+                    
+                    return {
+                        "status": "success", 
+                        "type": "audio",
+                        "files": separated_files
+                    }
+                    
+                except Exception as e:
+                    logger.error("Error in separation: %s", str(e))
+                    raise HTTPException(status_code=500, detail=str(e))
+                    
+        except Exception as e:
+            logger.error("Error processing file: %s", str(e))
+            raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/process-audio")
 async def process_audio(file: UploadFile = File(...)):
     logger.info("Received audio file: %s", file.filename)
-    try:
-        # Create output directory
-        output_base_dir = os.path.join(os.path.dirname(__file__), "processed")
-        os.makedirs(output_base_dir, exist_ok=True)
+    processor = AudioProcessor()
+    
+    # Create a temporary directory to handle the file
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_file_path = os.path.join(temp_dir, file.filename)
         
-        # Create a unique subdirectory for this processing
-        output_dir = os.path.join(output_base_dir, os.path.splitext(file.filename)[0])
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Create a temporary directory for processing
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Save uploaded file
-            temp_audio_path = os.path.join(temp_dir, file.filename)
+        try:
+            # Write the uploaded file to a temporary location
             content = await file.read()
-            
-            with open(temp_audio_path, "wb") as buffer:
+            with open(temp_file_path, "wb") as buffer:
                 buffer.write(content)
-            logger.info("Saved audio file to temporary path: %s", temp_audio_path)
             
-            # Convert input to WAV using FFmpeg
-            try:
-                wav_path = os.path.join(temp_dir, "input.wav")
-                result = subprocess.run([
-                    FFMPEG_PATH,
-                    "-i", temp_audio_path,
-                    "-ar", "44100",  # Set sample rate
-                    "-ac", "2",      # Set channels
-                    "-y",            # Overwrite output
-                    wav_path
-                ], capture_output=True, text=True, encoding='utf-8')
-                
-                if result.returncode != 0:
-                    raise RuntimeError(f"FFmpeg conversion failed: {result.stderr}")
-                logger.info("Successfully converted audio to WAV")
-                
-            except Exception as e:
-                logger.error("Error converting audio: %s", str(e))
-                raise HTTPException(status_code=500, detail=str(e))
+            # Process the file
+            result = await processor.process_file(
+                temp_file_path, 
+                os.path.splitext(file.filename)[0]
+            )
+            return result
             
-            try:
-                # Verify model exists before processing
-                ensure_model()
-                
-                # Create output directory for Spleeter
-                temp_output_dir = os.path.join(temp_dir, "output")
-                os.makedirs(temp_output_dir, exist_ok=True)
-                
-                # Separate the audio using Spleeter
-                separator.separate_to_file(wav_path, temp_output_dir)
-                logger.info("Successfully separated audio")
-                
-                # Process results and return paths
-                separated_files = {}
-                for stem in ['vocals', 'drums', 'bass', 'other']:
-                    stem_path = os.path.join(temp_output_dir, "input", f"{stem}.wav")
-                    if os.path.exists(stem_path):
-                        # Copy the file to the permanent output directory
-                        target_path = os.path.join(output_dir, f"{stem}.wav")
-                        shutil.copy2(stem_path, target_path)
-                        separated_files[stem] = target_path
-                
-                return {"status": "success", "files": separated_files}
-                
-            except Exception as e:
-                logger.error("Error in separation: %s", str(e))
-                raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        logger.error("Error processing audio file: %s", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            logger.error("Error processing file: %s", str(e))
+            raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 async def health_check():

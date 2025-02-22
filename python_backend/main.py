@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import librosa
 import numpy as np
 from spleeter.separator import Separator
@@ -27,7 +28,7 @@ warnings.filterwarnings('ignore')
 # Create pretrained_models directory if it doesn't exist
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, "pretrained_models")
-CHECKPOINT_DIR = os.path.join(MODELS_DIR, "4stems")
+CHECKPOINT_DIR = os.path.join(MODELS_DIR, "5stems")
 os.makedirs(MODELS_DIR, exist_ok=True)
 
 def download_file(url, filename):
@@ -44,9 +45,9 @@ def download_file(url, filename):
 def ensure_model():
     checkpoint_path = os.path.join(CHECKPOINT_DIR, "model.data-00000-of-00001")
     if not os.path.exists(checkpoint_path):
-        logger.info("Downloading Spleeter 4stems model...")
-        model_url = "https://github.com/deezer/spleeter/releases/download/v1.4.0/4stems.tar.gz"
-        temp_file = os.path.join(tempfile.gettempdir(), "4stems.tar.gz")
+        logger.info("Downloading Spleeter 5stems model...")
+        model_url = "https://github.com/deezer/spleeter/releases/download/v1.4.0/5stems.tar.gz"
+        temp_file = os.path.join(tempfile.gettempdir(), "5stems.tar.gz")
         
         try:
             # Download the model
@@ -128,8 +129,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Spleeter separator with two stems
-separator = Separator('spleeter:4stems', multiprocess=False)
+# Initialize Spleeter separator with five stems (vocals, drums, bass, piano, other)
+separator = Separator('spleeter:5stems', multiprocess=False)
+
+# Create and mount static file directory
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "processed")
+os.makedirs(STATIC_DIR, exist_ok=True)
+app.mount("/processed", StaticFiles(directory=STATIC_DIR), name="processed")
 
 class AudioProcessor:
     def __init__(self):
@@ -238,13 +244,16 @@ class AudioProcessor:
                     
                     # Process results and return paths
                     separated_files = {}
-                    for stem in ['vocals', 'drums', 'bass', 'other']:
-                        stem_path = os.path.join(temp_output_dir, "input", f"{stem}.wav")
+                    # Map piano to guitar in the output
+                    stem_mapping = {'vocals': 'vocals', 'drums': 'drums', 'bass': 'bass', 'piano': 'guitar', 'other': 'other'}
+                    
+                    for original_stem, mapped_stem in stem_mapping.items():
+                        stem_path = os.path.join(temp_output_dir, "input", f"{original_stem}.wav")
                         if os.path.exists(stem_path):
-                            # Copy the file to the permanent output directory
-                            target_path = os.path.join(output_dir, f"{stem}.wav")
+                            # Copy the file to the permanent output directory with the mapped name
+                            target_path = os.path.join(output_dir, f"{mapped_stem}.wav")
                             shutil.copy2(stem_path, target_path)
-                            separated_files[stem] = target_path
+                            separated_files[mapped_stem] = target_path
                     
                     return {
                         "status": "success", 
@@ -283,6 +292,13 @@ async def process_audio(file: UploadFile = File(...)):
         
         # Clean up temporary file
         os.remove(temp_file_path)
+        
+        # Convert file paths to URLs
+        if result.get('type') == 'audio' and result.get('files'):
+            base_url = "http://localhost:8000/processed"
+            for stem, path in result['files'].items():
+                relative_path = os.path.relpath(path, STATIC_DIR)
+                result['files'][stem] = f"{base_url}/{relative_path.replace(os.sep, '/')}"
         
         return result
     except Exception as e:

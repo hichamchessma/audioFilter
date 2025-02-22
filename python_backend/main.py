@@ -139,16 +139,30 @@ class AudioProcessor:
     async def process_file(self, file_path: str, output_dir: str) -> Dict[str, Any]:
         """Process an audio or MIDI file."""
         try:
-            # Check if it's a MIDI file
+            # Get lowercase file extension
+            file_ext = os.path.splitext(file_path)[1].lower()
+            
+            # Check if it's a MIDI file using MidiProcessor's validation
             if self.midi_processor.is_midi_file(file_path):
                 result = self.midi_processor.process_midi(file_path, output_dir)
+                # Convert numpy.int32 to native Python int
+                if isinstance(result, np.int32):
+                    result = int(result)
                 return {
                     'status': 'success',
                     'type': 'midi',
                     'analysis': result
                 }
             
-            # If not MIDI, process as regular audio
+            # If not MIDI, check if it's a supported audio format
+            if file_ext not in ['.wav', '.mp3', '.ogg']:
+                raise ValueError('Unsupported file format. Please provide a WAV, MP3, OGG, or MIDI file.')
+            
+            # Check audio duration
+            duration = librosa.get_duration(filename=file_path)
+            if duration > 600:  # 10 minutes
+                raise ValueError('Audio file too long. Maximum duration is 10 minutes.')
+            
             # Create output directory
             output_base_dir = os.path.join(os.path.dirname(__file__), "processed")
             os.makedirs(output_base_dir, exist_ok=True)
@@ -187,8 +201,39 @@ class AudioProcessor:
                     temp_output_dir = os.path.join(temp_dir, "output")
                     os.makedirs(temp_output_dir, exist_ok=True)
                     
-                    # Separate the audio using Spleeter
-                    self.separator.separate_to_file(wav_path, temp_output_dir)
+                    # Process audio in chunks if necessary
+                    if duration > 300:  # 5 minutes
+                        logger.info("Processing audio in chunks...")
+                        # Split audio into 5-minute chunks
+                        chunk_duration = 300
+                        num_chunks = int(duration // chunk_duration) + 1
+                        
+                        for i in range(num_chunks):
+                            start_time = i * chunk_duration
+                            end_time = min((i + 1) * chunk_duration, duration)
+                            
+                            # Create chunk path
+                            chunk_path = os.path.join(temp_dir, f"chunk_{i}.wav")
+                            
+                            # Extract chunk using FFmpeg
+                            subprocess.run([
+                                FFMPEG_PATH,
+                                "-i", wav_path,
+                                "-ss", str(start_time),
+                                "-t", str(end_time - start_time),
+                                "-y",
+                                chunk_path
+                            ], check=True)
+                            
+                            # Process chunk
+                            self.separator.separate_to_file(chunk_path, temp_output_dir)
+                            
+                            # Clean up chunk file
+                            os.remove(chunk_path)
+                    else:
+                        # Process entire file
+                        self.separator.separate_to_file(wav_path, temp_output_dir)
+                    
                     logger.info("Successfully separated audio")
                     
                     # Process results and return paths
@@ -217,29 +262,34 @@ class AudioProcessor:
 
 @app.post("/process-audio")
 async def process_audio(file: UploadFile = File(...)):
-    logger.info("Received audio file: %s", file.filename)
-    processor = AudioProcessor()
-    
-    # Create a temporary directory to handle the file
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_file_path = os.path.join(temp_dir, file.filename)
+    try:
+        # Save uploaded file to temporary location
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
+            shutil.copyfileobj(file.file, temp_file)
+            temp_file_path = temp_file.name
+
+        logger.info(f"Received audio file: {file.filename}")
         
-        try:
-            # Write the uploaded file to a temporary location
-            content = await file.read()
-            with open(temp_file_path, "wb") as buffer:
-                buffer.write(content)
-            
-            # Process the file
-            result = await processor.process_file(
-                temp_file_path, 
-                os.path.splitext(file.filename)[0]
-            )
-            return result
-            
-        except Exception as e:
-            logger.error("Error processing file: %s", str(e))
-            raise HTTPException(status_code=500, detail=str(e))
+        # Initialize processor
+        processor = AudioProcessor()
+        
+        # Create output directory using filename without extension
+        filename = os.path.splitext(os.path.basename(file.filename))[0]
+        output_dir = os.path.join("Results", filename)
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Process audio file
+        result = await processor.process_file(temp_file_path, output_dir)
+        
+        # Clean up temporary file
+        os.remove(temp_file_path)
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error processing file: {str(e)}")
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 async def health_check():

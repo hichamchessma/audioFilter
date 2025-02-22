@@ -16,4 +16,4 @@ pytest-asyncio==0.23.2
 starlette==0.20.4
 mido==1.2.10
 python-rtmidi==1.5.3
-fluidsynth==0.2
+pretty_midi==0.2.10

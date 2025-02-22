@@ -2,6 +2,9 @@ import os
 import mido
 from typing import Dict, List, Optional
 import logging
+import pretty_midi
+import soundfile as sf
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -25,65 +28,56 @@ class MidiProcessor:
             Dictionary containing processed track information and paths
         """
         try:
-            midi_file = mido.MidiFile(input_path)
+            # Load MIDI file
+            midi_data = pretty_midi.PrettyMIDI(input_path)
             
             # Create output directory if it doesn't exist
             os.makedirs(output_dir, exist_ok=True)
             
-            # Process each track
+            # Process each instrument
             track_info = {}
-            for i, track in enumerate(midi_file.tracks):
-                track_name = track.name if hasattr(track, 'name') and track.name else f"Track_{i}"
+            for i, instrument in enumerate(midi_data.instruments):
+                track_name = instrument.name if instrument.name else f"Track_{i}"
                 
-                # Count messages by type
-                message_counts = {}
-                for msg in track:
-                    msg_type = msg.type
-                    message_counts[msg_type] = message_counts.get(msg_type, 0) + 1
+                # Get note pitches, ensuring they're converted to native Python types
+                notes = instrument.notes
+                pitches = [int(note.pitch) for note in notes] if notes else [0]
                 
-                # Save track information
+                # Count notes and other events
                 track_info[track_name] = {
-                    'message_counts': message_counts,
-                    'length': len(track),
-                    'ticks': sum(msg.time for msg in track if hasattr(msg, 'time'))
+                    'program': int(instrument.program),
+                    'is_drum': bool(instrument.is_drum),
+                    'note_count': len(instrument.notes),
+                    'pitch_range': [
+                        int(min(pitches)),
+                        int(max(pitches))
+                    ]
                 }
             
-            # Save analysis results
-            output_path = os.path.join(output_dir, "midi_analysis.txt")
-            with open(output_path, 'w') as f:
-                f.write(f"MIDI File Analysis: {os.path.basename(input_path)}\n")
-                f.write(f"Format: {midi_file.type}\n")
-                f.write(f"Number of tracks: {len(midi_file.tracks)}\n")
-                f.write(f"Ticks per beat: {midi_file.ticks_per_beat}\n\n")
-                
-                for track_name, info in track_info.items():
-                    f.write(f"\nTrack: {track_name}\n")
-                    f.write(f"Length: {info['length']} messages\n")
-                    f.write(f"Total ticks: {info['ticks']}\n")
-                    f.write("Message types:\n")
-                    for msg_type, count in info['message_counts'].items():
-                        f.write(f"  - {msg_type}: {count}\n")
+            # Synthesize audio
+            audio_data = midi_data.synthesize(fs=44100)
             
-            return {
-                'analysis_path': output_path,
-                'track_info': track_info
+            # Save as WAV file
+            output_wav = os.path.join(output_dir, "output.wav")
+            sf.write(output_wav, audio_data, 44100)
+            
+            result = {
+                'tracks': track_info,
+                'audio_file': output_wav
             }
             
+            return result
+            
         except Exception as e:
-            logger.error(f"Error processing MIDI file: {str(e)}")
+            logger.error(f"Error synthesizing audio: {str(e)}")
             raise
 
     def get_track_names(self, midi_path: str) -> List[str]:
         """Get a list of track names from a MIDI file."""
         try:
-            midi_file = mido.MidiFile(midi_path)
-            track_names = []
-            
-            for i, track in enumerate(midi_file.tracks):
-                name = track.name if hasattr(track, 'name') and track.name else f"Track_{i}"
-                track_names.append(name)
-                
-            return track_names
+            midi_data = pretty_midi.PrettyMIDI(midi_path)
+            return [instr.name if instr.name else f"Track_{i}" 
+                   for i, instr in enumerate(midi_data.instruments)]
         except Exception as e:
             logger.error(f"Error getting track names: {str(e)}")
-            raise
+            return []

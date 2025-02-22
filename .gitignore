@@ -1,0 +1,40 @@
+# Python virtual environments
+venv39/
+
+# Compiled Python files
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+
+# Test output
+.pytest_cache/
+*.coverage
+coverage.xml
+
+# Logs
+*.log
+
+# Build directories
+target/
+processed/
+
+# Large files
+ffmpeg-release-essentials.zip
+python_backend/ffmpeg/
+# IDE and editor files
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Miscellaneous
+*.bak
+*.tmp
+*.swp

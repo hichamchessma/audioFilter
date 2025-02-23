@@ -12,11 +12,20 @@ import {
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import AudioFileIcon from '@mui/icons-material/AudioFile';
 import DeleteIcon from '@mui/icons-material/Delete';
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import './App.css';
 
 function App() {
   const [file, setFile] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processedFiles, setProcessedFiles] = useState({});
+  const [activeFilters, setActiveFilters] = useState({
+    vocals: true,
+    drums: true,
+    bass: true,
+    guitar: true,
+    other: true
+  });
 
   const onDrop = useCallback(acceptedFiles => {
     setFile(acceptedFiles[0]);
@@ -38,19 +47,42 @@ function App() {
     formData.append('file', file);
 
     try {
-      // Replace with your actual API endpoint
       const response = await fetch('http://localhost:8000/process-audio', {
         method: 'POST',
         body: formData,
       });
       const data = await response.json();
-      console.log(data);
-      // Handle success
+      if (data.status === 'success' && data.files) {
+        setProcessedFiles(data.files);
+      }
     } catch (error) {
       console.error('Error uploading file:', error);
-      // Handle error
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const toggleFilter = (filterName) => {
+    setActiveFilters(prev => ({
+      ...prev,
+      [filterName]: !prev[filterName]
+    }));
+  };
+
+  const handleDownload = async (url, stemName) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `${stemName}.wav`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error('Error downloading file:', error);
     }
   };
 
@@ -107,6 +139,63 @@ function App() {
             <Typography variant="body2" color="textSecondary">
               Processing your audio file...
             </Typography>
+          </Box>
+        )}
+
+        {Object.keys(processedFiles).length > 0 && (
+          <Box className="filters-container" sx={{ mt: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Audio Filters
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              {Object.keys(activeFilters).map((filter) => (
+                <Button
+                  key={filter}
+                  variant={activeFilters[filter] ? "contained" : "outlined"}
+                  onClick={() => toggleFilter(filter)}
+                  sx={{ textTransform: 'capitalize' }}
+                >
+                  {filter}
+                </Button>
+              ))}
+            </Box>
+            {Object.entries(processedFiles).map(([stem, path]) => (
+              <Box 
+                key={stem} 
+                sx={{ 
+                  mt: 2, 
+                  display: activeFilters[stem] ? 'block' : 'none',
+                  backgroundColor: '#f5f5f5',
+                  padding: 2,
+                  borderRadius: 1
+                }}
+              >
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  mb: 1
+                }}>
+                  <Typography variant="subtitle1" sx={{ textTransform: 'capitalize' }}>
+                    {stem}
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => handleDownload(path, stem)}
+                    startIcon={<CloudDownloadIcon />}
+                  >
+                    Download
+                  </Button>
+                </Box>
+                <audio 
+                  controls 
+                  src={path} 
+                  style={{ width: '100%' }} 
+                  preload="metadata"
+                />
+              </Box>
+            ))}
           </Box>
         )}
       </Paper>

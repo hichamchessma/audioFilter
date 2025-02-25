@@ -3,7 +3,7 @@ uvicorn==0.18.3
 python-multipart==0.0.6
 librosa==0.8.0
 spleeter==2.1.0
-numpy==1.19.5
+numpy==1.18.5
 scipy==1.12.0
 soundfile==0.12.1
 torch==2.1.0

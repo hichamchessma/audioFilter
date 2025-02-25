@@ -5,10 +5,9 @@ This application allows users to detect and separate instruments from audio file
 ## Architecture
 
 - **Backend**:
-  - Spring Boot (REST API and orchestration)
   - Python FastAPI (Audio processing)
   - PostgreSQL (Database)
-  - MinIO (Object storage)
+  - MinIO (Object storage)s
 
 ## Features
 
@@ -19,7 +18,6 @@ This application allows users to detect and separate instruments from audio file
 
 ## Technologies
 
-- Spring Boot
 - Python FastAPI
 - Librosa
 - Spleeter
@@ -28,7 +26,6 @@ This application allows users to detect and separate instruments from audio file
 - MinIO
 - Docker
 - Kubernetes
-- Jenkins
 
 ## Setup
 

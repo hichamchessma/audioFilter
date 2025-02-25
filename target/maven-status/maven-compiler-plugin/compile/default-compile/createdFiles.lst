@@ -1,8 +1,0 @@
-com\audiofilter\dto\ProcessedTrackDTO.class
-com\audiofilter\model\ProcessedTrack.class
-com\audiofilter\dto\AudioFileDTO.class
-com\audiofilter\service\PythonProcessingService.class
-com\audiofilter\model\AudioFile.class
-com\audiofilter\model\ProcessingStatus.class
-com\audiofilter\repository\ProcessedTrackRepository.class
-com\audiofilter\repository\AudioFileRepository.class

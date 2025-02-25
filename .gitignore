@@ -1,9 +1,12 @@
 # Python virtual environments
+venv/
 venv39/
 
 # Compiled Python files
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
 # Environment variables
 .env
@@ -15,14 +18,27 @@ coverage.xml
 
 # Logs
 *.log
+logs/
+debug.log
 
 # Build directories
 target/
 processed/
+Results/
+temp_uploads/
 
-# Large files
+# Large files (Évite d'envoyer des modèles et fichiers binaires inutiles)
 python_backend/ffmpeg/
 pretrained_models/
+bin/
+
+# Node.js modules (si applicable)
+node_modules/
+
+# Docker files (évite d'envoyer le cache inutile)
+docker-compose.override.yml
+.dockerignore
+
 # IDE and editor files
 .vscode/
 .idea/
@@ -38,3 +54,4 @@ Thumbs.db
 *.bak
 *.tmp
 *.swp
+*.swo

@@ -1,0 +1,6 @@
+{
+    "name": "audiofilterapp",
+    "scripts": {
+      "build": "cd frontend && npm install && npm run build"
+    }
+  }

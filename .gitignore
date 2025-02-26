@@ -1,7 +1,5 @@
 # Python virtual environments
-venv/
-venv39/
-
+python_backend/venv39/
 # Compiled Python files
 __pycache__/
 *.pyc

@@ -1,0 +1,5 @@
+python_backend/venv39/
+python_backend/pretrained_models/
+python_backend/ffmpeg/
+python_backend/Results/
+python_backend/temp_uploads/
